@@ -41,6 +41,7 @@ int mode = 0;
  */
 int main(int argc, char *argv[]) {
 	pthread_t pthread;
+	printf("\nMake sure that you disabled NTP!\n\n");
 	for (;;) {
 		int rc = 0;
 		mc_info_t info = {0};

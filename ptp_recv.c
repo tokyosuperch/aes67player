@@ -7,7 +7,7 @@
 #define SDOMAIN_LEN 16
 #define UUID_LEN 6
 
-
+int firstflag = 1;
 unsigned char srcUuid[UUID_LEN];
 unsigned int srcPort;
 unsigned int srcSeqId;
@@ -15,15 +15,20 @@ struct timespec sync_ts;
 struct timespec ts;
 extern struct timespec ts2;
 struct timespec resp_ts;
-double t1;
-double t3;
+long t1sec;
+long t1nsec;
+long t3sec;
+long t3nsec;
+struct timespec adjusttime;
+// timespec内のtime_t値が小さすぎるときにclock_settimeがエラーを起こすため1日ずらしておく
+int timeslip = (60*60)*24L;
 
 int sync_msg(unsigned char* msg);
 int followup_msg(unsigned char* msg);
 int delay_res(unsigned char* msg);
 unsigned long long int charToInt(int bytes, ...);
 extern int mode;
-char subdomain[SDOMAIN_LEN];
+// char subdomain[SDOMAIN_LEN];
 struct clockinfo grandmaster;
 
 int ptp_recv(unsigned char* msg) {
@@ -41,8 +46,8 @@ int ptp_recv(unsigned char* msg) {
 	}
 	// versionNetwork 0x02-0x03
 	// subdomain _DFLT
-	subdomain[SDOMAIN_LEN];
-	for (int i = 0; i < SDOMAIN_LEN; i++) subdomain[i] = msg[i + 0x04]; 
+	// subdomain[SDOMAIN_LEN];
+	// for (int i = 0; i < SDOMAIN_LEN; i++) subdomain[i] = msg[i + 0x04]; 
 	// printf("%s\n", subdomain);
 	// messageType 0x14
 	int msgType = (int)msg[0x14];
@@ -82,9 +87,13 @@ int sync_msg(unsigned char* msg) {
 	// flags 0x22-0x23
 	// originTimeStamp 0x28-0x2F
 	// (seconds) 0x28-0x2B
-	sync_ts.tv_sec = charToInt(4, msg[0x28], msg[0x29], msg[0x2a], msg[0x2b]);
+	sync_ts.tv_sec = (unsigned long int)charToInt(4, msg[0x28], msg[0x29], msg[0x2a], msg[0x2b]) + timeslip;
 	// (nanoseconds) 0x2C-0x2F
-	sync_ts.tv_nsec = charToInt(4, msg[0x2c], msg[0x2d], msg[0x2e], msg[0x2f]);
+	sync_ts.tv_nsec = (unsigned long int)charToInt(4, msg[0x2c], msg[0x2d], msg[0x2e], msg[0x2f]);
+	if (firstflag == 1) {
+		if (clock_settime(CLOCK_REALTIME, &sync_ts) == -1) perror("setclock");
+		firstflag = 0;
+	}
 	// epochNumber 0x30-0x31
 	// currentUTCOffset 0x32-0x33
 	// grandmasterCommunicationTechnology 0x35
@@ -112,7 +121,8 @@ int sync_msg(unsigned char* msg) {
 	clock_gettime(CLOCK_REALTIME, &ts);
 	// printf("originTimeStamp: %ld.%ld seconds\n", sync_ts.tv_sec, sync_ts.tv_nsec);
 	// printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
-	t1 = ((sync_ts.tv_nsec - ts.tv_nsec) * 0.000000001) + (sync_ts.tv_sec - ts.tv_sec);
+	t1sec = ts.tv_sec - sync_ts.tv_sec;
+	t1nsec = ts.tv_nsec - sync_ts.tv_nsec;
 	// printf("%.9f\n", t1);
 	mode = 1;
 	return 0;
@@ -133,12 +143,18 @@ int followup_msg(unsigned char* msg) {
 int delay_res(unsigned char* msg) {
 	// delayReceiptTimeStamp 0x28-0x2F
 	// (seconds) 0x28-0x2B
-	resp_ts.tv_sec = charToInt(4, msg[0x28], msg[0x29], msg[0x2a], msg[0x2b]);
+	resp_ts.tv_sec = (unsigned long int)charToInt(4, msg[0x28], msg[0x29], msg[0x2a], msg[0x2b]) + timeslip;
 	// (nanoseconds) 0x2C-0x2F
 	resp_ts.tv_nsec = charToInt(4, msg[0x2c], msg[0x2d], msg[0x2e], msg[0x2f]);
-	t3 = ((resp_ts.tv_nsec - ts2.tv_nsec) * 0.000000001) + (resp_ts.tv_sec - ts2.tv_sec);
-	printf("Received Delay Response Message!\n");
-	printf("Offset: %.9f sec\n\n", (t1+t3)/2);
+	t3sec = resp_ts.tv_sec - ts2.tv_sec;
+	t3nsec = resp_ts.tv_nsec - ts2.tv_nsec;
+	clock_gettime(CLOCK_REALTIME, &adjusttime);
+	adjusttime.tv_sec -= (t1sec - t3sec) / 2;
+	adjusttime.tv_nsec -= (t1nsec - t3nsec) / 2;
+	if (clock_settime(CLOCK_REALTIME, &adjusttime) == -1) perror("setclock");
+	double offset = (((t1nsec - t3nsec) / 2) * 0.000000001) + ((t1sec - t3sec) / 2);
+	printf("Syncronizing clock complete!\n");
+	printf("Offset: %.9f sec\n\n", offset);
 	fflush(stdout);
 	return 0;
 }
