@@ -8,7 +8,6 @@
 #include <stdbool.h>
 
 extern char *ptpmsg();
-int seqid = 1;
 
 int main(int argc, char** argv)
 {

@@ -25,7 +25,7 @@ static int multicast_receiver(mc_info_t *info, char *errmsg);
 static int socket_initialize(mc_info_t *info, char *errmsg);
 static int multicast_receive(mc_info_t *info, char *errmsg);
 static void socket_finalize(mc_info_t *info);
-extern int ptp_recv(char* msg);
+extern int ptp_recv(unsigned char* msg);
 
 /*!
  * @brief   main routine
@@ -144,7 +144,7 @@ static int socket_initialize(mc_info_t *info, char *errmsg) {
  * @return     成功ならば0、失敗ならば-1を返す。
  */
 static int multicast_receive(mc_info_t *info, char *errmsg) {
-    char recv_msg[MAXRECVSTRING+1];
+    unsigned char recv_msg[MAXRECVSTRING+1];
     int recv_msglen = 0;
 
     /* Receive a single datagram from the server */

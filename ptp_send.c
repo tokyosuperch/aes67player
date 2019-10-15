@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-extern int seqid;
+int seqid = 0x01ff;
 
 char *ptpmsg();
 char ptpflags(bool PTP_LI61, bool PTP_LI59, bool PTP_BOUNDARY_CLOCK, bool PTP_ASSIST, bool PTP_EXT_SYNC, bool PTP_PARENT_STATS, bool PTP_SYNC_BURST);
