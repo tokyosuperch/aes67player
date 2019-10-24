@@ -134,6 +134,15 @@ static int socket_initialize(mc_info_t *info, char *errmsg) {
         return(-1);
     }
 
+    /** イーサネット **/
+    char *opt;
+    opt = "wlo1";
+    int rd = setsockopt(info->sd, SOL_SOCKET, SO_BINDTODEVICE, opt, 4);
+    if(rd < 0){
+        sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
+        return(-1);
+    }
+
     return(0);
 }
 
