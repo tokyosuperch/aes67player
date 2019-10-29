@@ -32,23 +32,23 @@ extern int ptp_recv(unsigned char* msg);
  * @return  成功ならば0、失敗ならば-1を返す。
  */
 int main(int argc, char *argv[]) {
-    int rc = 0;
-    mc_info_t info = {0};
-    char errmsg[BUFSIZ];
+	int rc = 0;
+	mc_info_t info = {0};
+	char errmsg[BUFSIZ];
+	rc = initialize(argc, argv, &info, errmsg);
+	if(rc != 0){ 
+		fprintf(stderr, "Error: %s\n", errmsg);
+		return(-1);
+	}
 
-    rc = initialize(argc, argv, &info, errmsg);
-    if(rc != 0){ 
-        fprintf(stderr, "Error: %s\n", errmsg);
-        return(-1);
-    }   
-
-    rc = multicast_receiver(&info, errmsg);
-    if(rc != 0){ 
-        fprintf(stderr, "Error: %s\n", errmsg);
-        return(-1);
-    }
-
-    return(0);
+	for (;;) {
+		rc = multicast_receiver(&info, errmsg);
+		if(rc != 0){ 
+			fprintf(stderr, "Error: %s\n", errmsg);
+			return(-1);
+		}
+	}
+	return(0);
 }
 
 /*!
@@ -130,15 +130,6 @@ static int socket_initialize(mc_info_t *info, char *errmsg) {
     rc = setsockopt(info->sd, IPPROTO_IP, IP_ADD_MEMBERSHIP,
                     (void *)&multicast_request, sizeof(multicast_request));
     if(rc < 0){
-        sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
-        return(-1);
-    }
-
-    /** イーサネット **/
-    char *opt;
-    opt = "wlo1";
-    int rd = setsockopt(info->sd, SOL_SOCKET, SO_BINDTODEVICE, opt, 4);
-    if(rd < 0){
         sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
         return(-1);
     }
