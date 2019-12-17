@@ -5,23 +5,21 @@
 #define UUID_LEN 6
 
 
-char srcUuid[UUID_LEN];
+unsigned char srcUuid[UUID_LEN];
 int srcPort;
 int srcSeqId;
 struct timespec sync_ts;
 struct timespec ts;
-// モード
-// 0: 待機
-// 1: Syncを受け取りFollow_Up待ち
-// 2: Follow_Upを受け取りDelay_Request送信中
-// 3: Delay_Requestを受け取りSync_Message待ち
-int mode = 0;
 
 int sync_msg(unsigned char* msg);
 int followup_msg(unsigned char* msg);
 unsigned long long int charToInt(int bytes, ...);
+extern int mode;
 
 int ptp_recv(unsigned char* msg) {
+
+	printf("Receiving...\n");
+
 	int ret = 0;
 	// versionPTP 0x00-0x01
 	// この関数はPTPv1用
@@ -40,7 +38,7 @@ int ptp_recv(unsigned char* msg) {
 	int msgType = (int)msg[0x14];
 	// sourceCommunicationTechnology 0x15
 	if (msg[0x15] != 1) {
-		// printf("This works only in ethernet!\n");
+		printf("This works only in ethernet!\n");
 		return -1;
 	}
 	// sourceUuid 0x16-0x1B
@@ -49,11 +47,16 @@ int ptp_recv(unsigned char* msg) {
 	// sequenceId 0x1E-0x1F
 	srcSeqId = (int)charToInt(2, msg[0x1e], msg[0x1f]);
 	// control 0x20
+	printf("msgType=%d, control=%d\n", msgType, (int)msg[0x20]);
 	if (msg[0x20] == 0x00 && msgType == 1) {
 		// Sync Message
 		ret = sync_msg(msg);
-	} else if (msg[0x20] == 0x01 && msgType == 1) {
+	} else if (msg[0x20] == 0x02 && msgType == 2) {
 		ret = followup_msg(msg);
+	} else if (msg[0x20] == 0x03 && msgType == 2) {
+		printf("Received Delay Response Message!");
+		fflush(stdout);
+		mode = 0;
 	} else {
 		// 未実装
 		// printf("未実装 messageType:%d control:%d\n", msgType, msg[0x20]);
@@ -63,7 +66,7 @@ int ptp_recv(unsigned char* msg) {
 }
 
 int sync_msg(unsigned char* msg) {
-	// if (mode != 0) return -1;
+	if (mode != 0) return -1;
 	// sourceUuid 0x16-0x1B
 	for (int i = 0; i < UUID_LEN; i++) srcUuid[i] = msg[i + 0x16];
 	// flags 0x22-0x23
@@ -81,7 +84,10 @@ int sync_msg(unsigned char* msg) {
 
 int followup_msg(unsigned char* msg) {
 	for (int i = 0; i < UUID_LEN; i++) {
-		if (msg[i + 0x16] != srcUuid[i]) return -1;
+		if (msg[i + 0x16] != srcUuid[i]) {
+			printf("%d, %d Missmatch\n", (int)msg[i + 0x16], (int)srcUuid[i]);
+			return -1;
+		}
 	}
 	mode = 2;
 	return 0;

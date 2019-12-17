@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <pthread.h>
 
 /*
  *  マルチキャスト情報
@@ -20,28 +21,45 @@ typedef struct multicast_info mc_info_t;
 
 #define MAXRECVSTRING 255  /* Longest string to receive */
 
-static int initialize(int argc, char *argv[], mc_info_t *info, char *errmsg);
+static int initialize(int argc, char *argv[], mc_info_t *info, char *errmsg, int port);
 static int multicast_receiver(mc_info_t *info, char *errmsg);
 static int socket_initialize(mc_info_t *info, char *errmsg);
 static int multicast_receive(mc_info_t *info, char *errmsg);
 static void socket_finalize(mc_info_t *info);
 extern int ptp_recv(unsigned char* msg);
+extern void *sendapp();
+
+// モード
+// 0: 待機
+// 1: Syncを受け取りFollow_Up待ち
+// 2: Follow_Upを受け取りDelay_Request送信中
+// 3: Delay_Requestを受け取りSync_Message待ち
+int mode = 0;
 
 /*!
  * @brief   main routine
  * @return  成功ならば0、失敗ならば-1を返す。
  */
 int main(int argc, char *argv[]) {
-	int rc = 0;
-	mc_info_t info = {0};
-	char errmsg[BUFSIZ];
-	rc = initialize(argc, argv, &info, errmsg);
-	if(rc != 0){ 
-		fprintf(stderr, "Error: %s\n", errmsg);
-		return(-1);
-	}
-
+	pthread_t pthread;
 	for (;;) {
+		int rc = 0;
+		mc_info_t info = {0};
+		char errmsg[BUFSIZ];
+		if (mode >= 1 && mode <= 3) {
+			rc = initialize(argc, argv, &info, errmsg, 320);
+		} else {
+			rc = initialize(argc, argv, &info, errmsg, 319);
+		}
+		if(rc != 0){ 
+			fprintf(stderr, "Error: %s\n", errmsg);
+			return(-1);
+		}
+
+		if (mode == 2) {
+			pthread_create( &pthread, NULL, &sendapp, NULL );
+			mode = 3;
+		}
 		rc = multicast_receiver(&info, errmsg);
 		if(rc != 0){ 
 			fprintf(stderr, "Error: %s\n", errmsg);
@@ -59,7 +77,7 @@ int main(int argc, char *argv[]) {
  * @param[out] errmsg エラーメッセージ格納先
  * @return     成功ならば0、失敗ならば-1を返す。
  */
-static int initialize(int argc, char *argv[], mc_info_t *info, char *errmsg) {
+static int initialize(int argc, char *argv[], mc_info_t *info, char *errmsg, int port) {
     /* if(argc != 3){
         sprintf(errmsg, "usage: %s <multicast address> <port>", argv[0]);
         return(-1);
@@ -67,7 +85,7 @@ static int initialize(int argc, char *argv[], mc_info_t *info, char *errmsg) {
 
     memset(info, 0, sizeof(mc_info_t));
     info->ipaddr = "224.0.1.129";
-    info->port   = 319;
+    info->port   = port;
 
     return(0);
 }
