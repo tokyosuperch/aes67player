@@ -1,13 +1,16 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
+#include <unistd.h>
+#include <string.h>
+#include "info.h"
 #define SDOMAIN_LEN 16
 #define UUID_LEN 6
 
 
 unsigned char srcUuid[UUID_LEN];
-int srcPort;
-int srcSeqId;
+unsigned int srcPort;
+unsigned int srcSeqId;
 struct timespec sync_ts;
 struct timespec ts;
 
@@ -15,6 +18,8 @@ int sync_msg(unsigned char* msg);
 int followup_msg(unsigned char* msg);
 unsigned long long int charToInt(int bytes, ...);
 extern int mode;
+char subdomain[SDOMAIN_LEN];
+struct clockinfo grandmaster;
 
 int ptp_recv(unsigned char* msg) {
 
@@ -31,7 +36,7 @@ int ptp_recv(unsigned char* msg) {
 	}
 	// versionNetwork 0x02-0x03
 	// subdomain _DFLT
-	char subdomain[SDOMAIN_LEN];
+	subdomain[SDOMAIN_LEN];
 	for (int i = 0; i < SDOMAIN_LEN; i++) subdomain[i] = msg[i + 0x04]; 
 	// printf("%s\n", subdomain);
 	// messageType 0x14
@@ -54,8 +59,9 @@ int ptp_recv(unsigned char* msg) {
 	} else if (msg[0x20] == 0x02 && msgType == 2) {
 		ret = followup_msg(msg);
 	} else if (msg[0x20] == 0x03 && msgType == 2) {
-		printf("Received Delay Response Message!");
+		printf("Received Delay Response Message!\n");
 		fflush(stdout);
+		sleep(1);
 		mode = 0;
 	} else {
 		// 未実装
@@ -75,6 +81,30 @@ int sync_msg(unsigned char* msg) {
 	sync_ts.tv_sec = charToInt(4, msg[0x28], msg[0x29], msg[0x2a], msg[0x2b]);
 	// (nanoseconds) 0x2C-0x2F
 	sync_ts.tv_nsec = charToInt(4, msg[0x2c], msg[0x2d], msg[0x2e], msg[0x2f]);
+	// epochNumber 0x30-0x31
+	// currentUTCOffset 0x32-0x33
+	// grandmasterCommunicationTechnology 0x35
+	grandmaster.CommunicationTechnology = msg[0x35];
+	// grandmasterClockUuid 0x36-0x3B
+	for (int i = 0; i < UUID_LEN; i++) grandmaster.ClockUuid[i] = msg[0x36+i];
+	// grandmasterPortId 0x3C-0x3D
+	grandmaster.PortId = charToInt(2, msg[0x3c], msg[0x3d]);
+	// grandmasterSequenceId 0x3E-0x3F
+	grandmaster.SequenceId = charToInt(2, msg[0x3e], msg[0x3f]);
+	// grandmasterClockStratum 0x43
+	grandmaster.ClockStratum = msg[0x43];
+	// grandmasterClockIdentifier 0x44-0x47
+	for (int i = 0; i < 4; i++) grandmaster.ClockIdentifier[i] = (char)msg[0x44+i];
+	// grandmasterClockVariance 0x4A-0x4B
+	// charToInt()はunsignedのためめんどくさい方法を取りました
+	char lendian[2];
+	lendian[0] = msg[0x4b];
+	lendian[1] = msg[0x4a];
+	memcpy(&grandmaster.ClockVariance, &lendian, 2);
+	// grandmasterPreferred 0x4D
+	grandmaster.Preferred = msg[0x4d];
+	// grandmasterIsBoundaryClock 0x4F
+	grandmaster.IsBoundaryClock = msg[0x4f];
 	clock_gettime(CLOCK_REALTIME, &ts);
 	printf("originTimeStamp: %ld.%ld seconds\n", sync_ts.tv_sec, sync_ts.tv_nsec);
 	printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
@@ -89,6 +119,7 @@ int followup_msg(unsigned char* msg) {
 			return -1;
 		}
 	}
+	// associatedSequenceId 0x2a-0x2b
 	mode = 2;
 	return 0;
 }

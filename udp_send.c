@@ -6,9 +6,13 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
 
 extern char *ptpmsg();
 extern int mode;
+struct ifreq ifr;
+unsigned char srcUuid[6];
 
 void *sendapp()
 {
@@ -17,9 +21,19 @@ void *sendapp()
 
 	if((sd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("socket");
-		return;
+		return 0;
 	}
 
+	strncpy(ifr.ifr_name, "enp3s0", IFNAMSIZ-1);
+	ioctl(sd, SIOCGIFHWADDR, &ifr);
+	for (int i = 0; i < 6; i++) srcUuid[i] = ifr.ifr_hwaddr.sa_data[i];
+	printf("%.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n",
+         (unsigned char)ifr.ifr_hwaddr.sa_data[0],
+         (unsigned char)ifr.ifr_hwaddr.sa_data[1],
+         (unsigned char)ifr.ifr_hwaddr.sa_data[2],
+         (unsigned char)ifr.ifr_hwaddr.sa_data[3],
+         (unsigned char)ifr.ifr_hwaddr.sa_data[4],
+         (unsigned char)ifr.ifr_hwaddr.sa_data[5]);
 	// 送信先アドレスとポート番号を設定する
 	// 受信プログラムと異なるあて先を設定しても UDP の場合はエラーにはならない
 	addr.sin_family = AF_INET;
@@ -34,12 +48,12 @@ void *sendapp()
 	// パケットをUDPで送信
 	if(sendto(sd, ptpmsg(), 124, 0, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		perror("sendto");
-		return;
+		return 0;
 	}
 
 	mode = 3;
 	printf("send Delay Req msg\n");
 	fflush(stdout);
 
-	return;
+	return 0;
 }
