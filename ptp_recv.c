@@ -13,9 +13,14 @@ unsigned int srcPort;
 unsigned int srcSeqId;
 struct timespec sync_ts;
 struct timespec ts;
+extern struct timespec ts2;
+struct timespec resp_ts;
+double t1;
+double t3;
 
 int sync_msg(unsigned char* msg);
 int followup_msg(unsigned char* msg);
+int delay_res(unsigned char* msg);
 unsigned long long int charToInt(int bytes, ...);
 extern int mode;
 char subdomain[SDOMAIN_LEN];
@@ -23,7 +28,7 @@ struct clockinfo grandmaster;
 
 int ptp_recv(unsigned char* msg) {
 
-	printf("Receiving...\n");
+	// printf("Receiving...\n");
 
 	int ret = 0;
 	// versionPTP 0x00-0x01
@@ -52,15 +57,14 @@ int ptp_recv(unsigned char* msg) {
 	// sequenceId 0x1E-0x1F
 	srcSeqId = (int)charToInt(2, msg[0x1e], msg[0x1f]);
 	// control 0x20
-	printf("msgType=%d, control=%d\n", msgType, (int)msg[0x20]);
+	// printf("msgType=%d, control=%d\n", msgType, (int)msg[0x20]);
 	if (msg[0x20] == 0x00 && msgType == 1) {
 		// Sync Message
 		ret = sync_msg(msg);
 	} else if (msg[0x20] == 0x02 && msgType == 2) {
 		ret = followup_msg(msg);
 	} else if (msg[0x20] == 0x03 && msgType == 2) {
-		printf("Received Delay Response Message!\n");
-		fflush(stdout);
+		ret = delay_res(msg);
 		sleep(1);
 		mode = 0;
 	} else {
@@ -106,8 +110,10 @@ int sync_msg(unsigned char* msg) {
 	// grandmasterIsBoundaryClock 0x4F
 	grandmaster.IsBoundaryClock = msg[0x4f];
 	clock_gettime(CLOCK_REALTIME, &ts);
-	printf("originTimeStamp: %ld.%ld seconds\n", sync_ts.tv_sec, sync_ts.tv_nsec);
-	printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
+	// printf("originTimeStamp: %ld.%ld seconds\n", sync_ts.tv_sec, sync_ts.tv_nsec);
+	// printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
+	t1 = ((sync_ts.tv_nsec - ts.tv_nsec) * 0.000000001) + (sync_ts.tv_sec - ts.tv_sec);
+	// printf("%.9f\n", t1);
 	mode = 1;
 	return 0;
 }
@@ -121,6 +127,19 @@ int followup_msg(unsigned char* msg) {
 	}
 	// associatedSequenceId 0x2a-0x2b
 	mode = 2;
+	return 0;
+}
+
+int delay_res(unsigned char* msg) {
+	// delayReceiptTimeStamp 0x28-0x2F
+	// (seconds) 0x28-0x2B
+	resp_ts.tv_sec = charToInt(4, msg[0x28], msg[0x29], msg[0x2a], msg[0x2b]);
+	// (nanoseconds) 0x2C-0x2F
+	resp_ts.tv_nsec = charToInt(4, msg[0x2c], msg[0x2d], msg[0x2e], msg[0x2f]);
+	t3 = ((resp_ts.tv_nsec - ts2.tv_nsec) * 0.000000001) + (resp_ts.tv_sec - ts2.tv_sec);
+	printf("Received Delay Response Message!\n");
+	printf("Offset: %.9f sec\n\n", (t1+t3)/2);
+	fflush(stdout);
 	return 0;
 }
 

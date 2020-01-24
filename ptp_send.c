@@ -13,6 +13,7 @@ char ptpflags(bool PTP_LI61, bool PTP_LI59, bool PTP_BOUNDARY_CLOCK, bool PTP_AS
 void delay_req(char *temp);
 extern unsigned char srcUuid[UUID_LEN];
 extern struct timespec ts;
+struct timespec ts2;
 extern struct clockinfo grandmaster;
 
 char *ptpmsg() {
@@ -53,6 +54,7 @@ char *ptpmsg() {
 	temp[0x22] = (char)0x00;
 	temp[0x23] = ptpflags(false, false, true, true, false, false, false);
 	delay_req(temp);
+	clock_gettime(CLOCK_REALTIME, &ts2);
 	return temp;
 }
 
@@ -77,7 +79,7 @@ char ptpflags(bool PTP_LI61, bool PTP_LI59, bool PTP_BOUNDARY_CLOCK, bool PTP_AS
 void delay_req(char *temp) {
 	clock_gettime(CLOCK_REALTIME, &ts);
 	// originTimestamp (seconds) 0x28-0x2b
-	printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
+	// printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
 	for (int i = 3; i >= 0; i--) temp[0x28+(3-i)] = (unsigned char)(ts.tv_sec >> (i * 8)) % 256;
 	// originTimestamp (nanoseconds) 0x2c-0x2f
 	for (int i = 3; i >= 0; i--) temp[0x2c+(3-i)] = (unsigned char)(ts.tv_nsec >> (i * 8)) % 256;
@@ -87,8 +89,7 @@ void delay_req(char *temp) {
 	temp[0x35] = grandmaster.CommunicationTechnology;
 	// grandMasterClockUuid 0x36-0x3b
 	for (int i = 0; i <= 6; i++) temp[0x36+i] = grandmaster.ClockUuid[i];
-	for (int i = 0; i < UUID_LEN; i++) printf("%.2x ",grandmaster.ClockUuid[i]);
-	printf("\n");
+	// for (int i = 0; i < UUID_LEN; i++) printf("%.2x ",grandmaster.ClockUuid[i]);
 	// grandmasterPortId 0x3c-0x3d
 	for (int i = 1; i >= 0; i--) temp[0x3c+(1-i)] = (unsigned char)(grandmaster.PortId >> (i * 8)) % 256;
 	// grandmasterSequenceId 0x3e-0x3f
