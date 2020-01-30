@@ -27,6 +27,7 @@ static int multicast_receive(mc_info_t *info, char *errmsg);
 static void socket_finalize(mc_info_t *info);
 extern int ptp_recv(unsigned char* msg);
 extern void *sendapp();
+extern struct clockinfo grandmaster;
 
 // モード
 // 0: 待機
@@ -41,30 +42,30 @@ int mode = 0;
  */
 int main(int argc, char *argv[]) {
 	pthread_t pthread;
-	printf("\nMake sure that you disabled NTP!\n\n");
+	// printf("\nMake sure that you disabled NTP!\n\n");
 	for (;;) {
 		int rc = 0;
 		mc_info_t info = {0};
-		char errmsg[BUFSIZ];
+		/* char errmsg[BUFSIZ];
 		if (mode >= 1 && mode <= 3) {
 			rc = initialize(argc, argv, &info, errmsg, 320);
 		} else {
 			rc = initialize(argc, argv, &info, errmsg, 319);
-		}
-		if(rc != 0){ 
+		} */
+		/* if(rc != 0){ 
 			fprintf(stderr, "Error: %s\n", errmsg);
 			return(-1);
-		}
+		} */
 		sendapp();
 		/* if (mode == 2) {
 			pthread_create( &pthread, NULL, &sendapp, NULL );
 			mode = 3;
 		} */
-		// rc = multicast_receiver(&info, errmsg);
+		/* rc = multicast_receiver(&info, errmsg);
 		if(rc != 0){ 
 			fprintf(stderr, "Error: %s\n", errmsg);
 			return(-1);
-		}
+		} */
 	}
 	return(0);
 }

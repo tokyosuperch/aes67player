@@ -2,22 +2,25 @@
 #include <stdbool.h>
 #include <time.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "info.h"
 #define SDOMAIN_LEN 16
 #define UUID_LEN 6
 
 int seqid = 0x01ff;
 
-char *ptpmsg();
+char *ptpmsg(int state);
 char ptpflags(bool PTP_LI61, bool PTP_LI59, bool PTP_BOUNDARY_CLOCK, bool PTP_ASSIST, bool PTP_EXT_SYNC, bool PTP_PARENT_STATS, bool PTP_SYNC_BURST);
 void delay_req(char *temp);
 void gm_sync(char *temp);
+void gm_followup(char *temp);
 extern unsigned char srcUuid[UUID_LEN];
 extern struct timespec ts;
 struct timespec ts2;
 extern struct clockinfo grandmaster;
+extern int mode;
 
-char *ptpmsg() {
+char *ptpmsg(int state) {
 	
 	char *temp;
 	temp = (char *)malloc(124 * sizeof(char));
@@ -34,8 +37,6 @@ char *ptpmsg() {
 	temp[0x07] = 'L';
 	temp[0x08] = 'T';
 	for (int i = 0x09; i < 0x14; i++) temp[i] = '\0';
-	// messageType スレーブで使う時はEventMessage(1)のみ？
-	temp[0x14] = (char)0x01;
 	// sourceCommunicationTechnology
 	// IEEE 802.3(Ethernet)(1)
 	temp[0x15] = (char)0x01;
@@ -45,16 +46,20 @@ char *ptpmsg() {
 	temp[0x1c] = (char)0x00;
 	temp[0x1d] = (char)0x01;
 	// sequenceId
-	temp[0x1e] = (char)(seqid >> 8);
-	temp[0x1f] = (char)(seqid % 256);
+	temp[0x1e] = (char)(grandmaster.SequenceId >> 8);
+	temp[0x1f] = (char)(grandmaster.SequenceId % 256);
 	// 不明
 	temp[0x21] = (char)0x00;
 	// flags
 	temp[0x22] = (char)0x00;
 	temp[0x23] = ptpflags(false, false, true, true, false, false, false);
 	// delay_req(temp);
-	gm_sync(temp);
-	clock_gettime(CLOCK_REALTIME, &ts2);
+	if (mode == 0) {
+		gm_sync(temp);
+	} else if (mode == 1) {
+		gm_followup(temp);
+	}
+	// clock_gettime(CLOCK_REALTIME, &ts2);
 	return temp;
 }
 
@@ -109,6 +114,8 @@ void delay_req(char *temp) {
 }
 
 void gm_sync(char *temp) {
+	// messageType Event Message(1)
+	temp[0x14] = (char)0x01;
 	// control Sync Message(0)
 	temp[0x20] = (char)0x00;
 	clock_gettime(CLOCK_REALTIME, &ts);
@@ -122,13 +129,42 @@ void gm_sync(char *temp) {
 	// epochNumber 0x30-0x31
 	// currentUTCOffset 0x32-0x33
 	// grandmasterCommunicationTechnology 0x35
-	temp[0x35] = (char)0x01; // Ethernet(1)
+	temp[0x35] = grandmaster.CommunicationTechnology;
 	// grandmasterClockUuid 0x36-0x3B
-	for (int i = 0; i < UUID_LEN; i++) temp[0x36+i] = srcUuid[i];
+	for (int i = 0; i < UUID_LEN; i++) temp[0x36+i] = grandmaster.ClockUuid[i];
 	// grandmasterPortId 0x3c-0x3d
 	for (int i = 1; i >= 0; i--) temp[0x3c+(1-i)] = (unsigned char)(grandmaster.PortId >> (i * 8)) % 256;
 	// grandmasterSequenceId 0x3e-0x3f
 	for (int i = 1; i >= 0; i--) temp[62+(1-i)] = (unsigned char)(grandmaster.SequenceId >> (i * 8)) % 256;
 	// grandmasterClockStratum 0x43
-	temp[0x43] = (char)0x01;
+	temp[0x43] = grandmaster.ClockStratum;
+	// grandmasterClockIdentifier 0x44-0x47
+	for (int i = 0; i < 4; i++) temp[0x44+i] = (unsigned char)grandmaster.ClockIdentifier[i];
+	// grandmasterClockVariance 0x4A-0x4B
+	for (int i = 1; i >= 0; i--) temp[0x4a+(1-i)] = (unsigned char)(grandmaster.ClockVariance >> (i * 8)) % 256;
+	// grandmasterPreferred 0x4D
+	temp[0x4d] = grandmaster.Preferred;
+	// grandmasterIsBoundaryClock 0x4F
+	temp[0x4f] = grandmaster.IsBoundaryClock;
+	mode = 1;
+}
+
+void gm_followup(char *temp) {
+	// messageType General Message(2)
+	temp[0x14] = (char)0x02;
+	// control Follow_Up Message(2)
+	temp[0x20] = (char)0x02;
+	// flags 0x22-0x23
+	temp[0x23] = (char)0x0c;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	// associatedSequenceId 0x2a-0x2b
+	for (int i = 1; i >= 0; i--) temp[0x2a+(1-i)] = (unsigned char)(grandmaster.SequenceId >> (i * 8)) % 256;
+	// preciseoriginTimestamp (seconds) 0x2c-0x2f
+	// printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
+	for (int i = 3; i >= 0; i--) temp[0x2c+(3-i)] = (unsigned char)(ts.tv_sec >> (i * 8)) % 256;
+	// preciseoriginTimestamp (nanoseconds) 0x30-0x33
+	for (int i = 3; i >= 0; i--) temp[0x30+(3-i)] = (unsigned char)(ts.tv_nsec >> (i * 8)) % 256;
+	usleep(20000);
+	mode = 0;
+	grandmaster.SequenceId++;
 }
