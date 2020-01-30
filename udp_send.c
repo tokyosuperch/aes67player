@@ -16,7 +16,7 @@ struct ifreq ifr;
 unsigned char srcUuid[6];
 extern struct timespec ts;
 
-void *sendapp()
+void sendapp()
 {
 	int sd;
 	struct sockaddr_in addr;
@@ -53,7 +53,7 @@ void *sendapp()
 		perror("sendto");
 		return 0;
 	}
-
+	close(sd);
 	mode = 3;
 	// printf("send Delay Req msg\n");
 	// fflush(stdout);

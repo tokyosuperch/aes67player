@@ -11,6 +11,7 @@ int seqid = 0x01ff;
 char *ptpmsg();
 char ptpflags(bool PTP_LI61, bool PTP_LI59, bool PTP_BOUNDARY_CLOCK, bool PTP_ASSIST, bool PTP_EXT_SYNC, bool PTP_PARENT_STATS, bool PTP_SYNC_BURST);
 void delay_req(char *temp);
+void gm_sync(char *temp);
 extern unsigned char srcUuid[UUID_LEN];
 extern struct timespec ts;
 struct timespec ts2;
@@ -46,14 +47,13 @@ char *ptpmsg() {
 	// sequenceId
 	temp[0x1e] = (char)(seqid >> 8);
 	temp[0x1f] = (char)(seqid % 256);
-	// control Delay_Req Message(1)
-	temp[0x20] = (char)0x01;
 	// 不明
 	temp[0x21] = (char)0x00;
 	// flags
 	temp[0x22] = (char)0x00;
 	temp[0x23] = ptpflags(false, false, true, true, false, false, false);
-	delay_req(temp);
+	// delay_req(temp);
+	gm_sync(temp);
 	clock_gettime(CLOCK_REALTIME, &ts2);
 	return temp;
 }
@@ -77,6 +77,8 @@ char ptpflags(bool PTP_LI61, bool PTP_LI59, bool PTP_BOUNDARY_CLOCK, bool PTP_AS
 }
 
 void delay_req(char *temp) {
+	// control Delay_Req Message(1)
+	temp[0x20] = (char)0x01;
 	clock_gettime(CLOCK_REALTIME, &ts);
 	// originTimestamp (seconds) 0x28-0x2b
 	// printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
@@ -104,4 +106,29 @@ void delay_req(char *temp) {
 	temp[0x4d] = grandmaster.Preferred;
 	// grandmasterisBoundaryClock 0x4f
 	temp[0x4f] = grandmaster.IsBoundaryClock;
+}
+
+void gm_sync(char *temp) {
+	// control Sync Message(0)
+	temp[0x20] = (char)0x00;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	// flags 0x22-0x23
+	temp[0x23] = (char)0x0c;
+	// originTimestamp (seconds) 0x28-0x2b
+	// printf("tv_sec=%ld  tv_nsec=%ld\n\n",ts.tv_sec,ts.tv_nsec);
+	for (int i = 3; i >= 0; i--) temp[0x28+(3-i)] = (unsigned char)(ts.tv_sec >> (i * 8)) % 256;
+	// originTimestamp (nanoseconds) 0x2c-0x2f
+	for (int i = 3; i >= 0; i--) temp[0x2c+(3-i)] = (unsigned char)(ts.tv_nsec >> (i * 8)) % 256;
+	// epochNumber 0x30-0x31
+	// currentUTCOffset 0x32-0x33
+	// grandmasterCommunicationTechnology 0x35
+	temp[0x35] = (char)0x01; // Ethernet(1)
+	// grandmasterClockUuid 0x36-0x3B
+	for (int i = 0; i < UUID_LEN; i++) temp[0x36+i] = srcUuid[i];
+	// grandmasterPortId 0x3c-0x3d
+	for (int i = 1; i >= 0; i--) temp[0x3c+(1-i)] = (unsigned char)(grandmaster.PortId >> (i * 8)) % 256;
+	// grandmasterSequenceId 0x3e-0x3f
+	for (int i = 1; i >= 0; i--) temp[62+(1-i)] = (unsigned char)(grandmaster.SequenceId >> (i * 8)) % 256;
+	// grandmasterClockStratum 0x43
+	temp[0x43] = (char)0x01;
 }

@@ -55,12 +55,12 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr, "Error: %s\n", errmsg);
 			return(-1);
 		}
-
-		if (mode == 2) {
+		sendapp();
+		/* if (mode == 2) {
 			pthread_create( &pthread, NULL, &sendapp, NULL );
 			mode = 3;
-		}
-		rc = multicast_receiver(&info, errmsg);
+		} */
+		// rc = multicast_receiver(&info, errmsg);
 		if(rc != 0){ 
 			fprintf(stderr, "Error: %s\n", errmsg);
 			return(-1);
