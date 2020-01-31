@@ -27,7 +27,9 @@ static int multicast_receive(mc_info_t *info, char *errmsg);
 static void socket_finalize(mc_info_t *info);
 extern int ptp_recv(unsigned char* msg);
 extern void *sendapp();
+void *udprecv();
 extern struct clockinfo grandmaster;
+int multifd = 0;
 
 // モード
 // 0: 待機
@@ -42,30 +44,32 @@ int mode = 0;
  */
 int main(int argc, char *argv[]) {
 	pthread_t pthread;
+	pthread_create( &pthread, NULL, &udprecv, NULL );
 	// printf("\nMake sure that you disabled NTP!\n\n");
+	for (;;) {
+		if (multifd >= 512) {
+			for (int i = 3; i <= 512; i++) close(i);
+		}
+		sendapp();
+	}
+	return(0);
+}
+
+void *udprecv() {
 	for (;;) {
 		int rc = 0;
 		mc_info_t info = {0};
-		/* char errmsg[BUFSIZ];
-		if (mode >= 1 && mode <= 3) {
-			rc = initialize(argc, argv, &info, errmsg, 320);
-		} else {
-			rc = initialize(argc, argv, &info, errmsg, 319);
-		} */
-		/* if(rc != 0){ 
-			fprintf(stderr, "Error: %s\n", errmsg);
-			return(-1);
-		} */
-		sendapp();
-		/* if (mode == 2) {
-			pthread_create( &pthread, NULL, &sendapp, NULL );
-			mode = 3;
-		} */
-		/* rc = multicast_receiver(&info, errmsg);
+		char errmsg[BUFSIZ];
+		rc = initialize(NULL, NULL, &info, errmsg, 319);
 		if(rc != 0){ 
 			fprintf(stderr, "Error: %s\n", errmsg);
-			return(-1);
-		} */
+			continue;
+		}
+		rc = multicast_receiver(&info, errmsg);
+		if(rc != 0){ 
+			fprintf(stderr, "Error: %s\n", errmsg);
+			continue;
+		}
 	}
 	return(0);
 }
@@ -125,8 +129,10 @@ static int socket_initialize(mc_info_t *info, char *errmsg) {
 
     /* ソケットの生成 : UDPを指定する */
     info->sd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    multifd = info->sd;
     if(info->sd < 0){
         sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
+        // close(info->sd);
         return(-1);
     }
 
@@ -140,6 +146,7 @@ static int socket_initialize(mc_info_t *info, char *errmsg) {
               sizeof(info->addr));
     if(info->sd < 0){
         sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
+        // close(info->sd);
         return(-1);
     }
 
@@ -150,6 +157,7 @@ static int socket_initialize(mc_info_t *info, char *errmsg) {
                     (void *)&multicast_request, sizeof(multicast_request));
     if(rc < 0){
         sprintf(errmsg, "(line:%d) %s", __LINE__, strerror(errno));
+        // close(info->sd);
         return(-1);
     }
 

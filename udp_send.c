@@ -27,6 +27,7 @@ void sendapp()
 
 	if((sd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("socket");
+		close(sd);
 		return 0;
 	}
 
@@ -58,6 +59,7 @@ void sendapp()
 	// パケットをUDPで送信
 	if(sendto(sd, ptpmsg(), 124, 0, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		perror("sendto");
+		close(sd);
 		return 0;
 	}
 	close(sd);

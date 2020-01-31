@@ -3,6 +3,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <string.h>
+#include <pthread.h>
 #include "info.h"
 #define SDOMAIN_LEN 16
 #define UUID_LEN 6
@@ -26,10 +27,13 @@ int timeslip = (60*60)*24L;
 int sync_msg(unsigned char* msg);
 int followup_msg(unsigned char* msg);
 int delay_res(unsigned char* msg);
+void gm_delayreq(unsigned char* msg);
 unsigned long long int charToInt(int bytes, ...);
 extern int mode;
+extern void *sendapp();
 // char subdomain[SDOMAIN_LEN];
 struct clockinfo grandmaster;
+struct clockinfo requestingSource;
 
 int ptp_recv(unsigned char* msg) {
 
@@ -63,7 +67,7 @@ int ptp_recv(unsigned char* msg) {
 	srcSeqId = (int)charToInt(2, msg[0x1e], msg[0x1f]);
 	// control 0x20
 	// printf("msgType=%d, control=%d\n", msgType, (int)msg[0x20]);
-	if (msg[0x20] == 0x00 && msgType == 1) {
+	/* if (msg[0x20] == 0x00 && msgType == 1) {
 		// Sync Message
 		ret = sync_msg(msg);
 	} else if (msg[0x20] == 0x02 && msgType == 2) {
@@ -72,6 +76,11 @@ int ptp_recv(unsigned char* msg) {
 		ret = delay_res(msg);
 		sleep(1);
 		mode = 0;
+	} */ if (msg[0x20] == 0x01 && msgType == 1) {
+		gm_delayreq(msg);
+		mode = 3;
+		pthread_t resthread;
+		pthread_create( &resthread, NULL, &sendapp, NULL );
 	} else {
 		// 未実装
 		// printf("未実装 messageType:%d control:%d\n", msgType, msg[0x20]);
@@ -171,4 +180,15 @@ unsigned long long int charToInt(int bytes, ...) {
 	va_end(list);
 
 	return temp;
+}
+
+void gm_delayreq(unsigned char* msg) {
+	// sourceCommunicationTechnology 0x15
+	requestingSource.CommunicationTechnology = msg[0x15];
+	// sourceUuid 0x16-0x1B
+	for (int i = 0; i < UUID_LEN; i++) requestingSource.ClockUuid[i] = msg[0x16+i];
+	// sourcePortId 0x1C-0x1D
+	requestingSource.PortId = charToInt(2, msg[0x1c], msg[0x1d]);
+	// sequenceId 0x1E-0x1F
+	requestingSource.SequenceId = (int)charToInt(2, msg[0x1e], msg[0x1f]);
 }
